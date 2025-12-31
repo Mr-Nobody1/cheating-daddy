@@ -262,6 +262,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                         // Only send/save if there's actual content
                         if (messageBuffer.trim() !== '') {
                             sendToRenderer('update-response', messageBuffer);
+                            sendToRenderer('generation-complete', null);
 
                             // Save conversation turn when we have both transcription and AI response
                             if (currentTranscription) {

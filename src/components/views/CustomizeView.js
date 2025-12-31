@@ -556,6 +556,7 @@ export class CustomizeView extends LitElement {
         responseVerbosity: { type: String },
         codeDetailLevel: { type: String },
         includeExamples: { type: Boolean },
+        renderMode: { type: String },
     };
 
     constructor() {
@@ -600,6 +601,7 @@ export class CustomizeView extends LitElement {
         this.responseVerbosity = 'balanced';
         this.codeDetailLevel = 'complete';
         this.includeExamples = true;
+        this.renderMode = 'streaming';
 
         this._loadFromStorage();
     }
@@ -697,6 +699,7 @@ export class CustomizeView extends LitElement {
             this.responseVerbosity = prefs.responseVerbosity ?? 'balanced';
             this.codeDetailLevel = prefs.codeDetailLevel ?? 'complete';
             this.includeExamples = prefs.includeExamples ?? true;
+            this.renderMode = prefs.renderMode ?? 'streaming';
 
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
@@ -1114,6 +1117,20 @@ export class CustomizeView extends LitElement {
         this.requestUpdate();
     }
 
+    async handleRenderModeChange(e) {
+        this.renderMode = e.target.value;
+        await cheatingDaddy.storage.updatePreference('renderMode', this.renderMode);
+        
+        // Dispatch event for parent app to sync renderMode immediately
+        this.dispatchEvent(new CustomEvent('render-mode-changed', {
+            bubbles: true,
+            composed: true,
+            detail: { renderMode: this.renderMode }
+        }));
+        
+        this.requestUpdate();
+    }
+
     renderQualitySection() {
         const verbosityOptions = [
             { value: 'concise', name: 'Concise', description: 'Short, direct answers (1-3 sentences)' },
@@ -1177,6 +1194,24 @@ export class CustomizeView extends LitElement {
                     </div>
                     <div class="form-description">
                         When enabled, AI will include example inputs/outputs for code solutions.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Render Mode
+                        <span class="current-selection">${this.renderMode === 'batch' ? 'Batch' : 'Streaming'}</span>
+                    </label>
+                    <select class="form-control" .value=${this.renderMode} @change=${this.handleRenderModeChange}>
+                        <option value="streaming" ?selected=${this.renderMode === 'streaming'}>
+                            Streaming - Show response as it generates
+                        </option>
+                        <option value="batch" ?selected=${this.renderMode === 'batch'}>
+                            Batch - Show complete response at once
+                        </option>
+                    </select>
+                    <div class="form-description">
+                        Streaming shows text progressively. Batch waits for the full response before displaying.
                     </div>
                 </div>
             </div>

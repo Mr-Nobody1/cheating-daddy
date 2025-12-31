@@ -29,7 +29,9 @@ const DEFAULT_PREFERENCES = {
     // Response Quality Settings (Phase 1)
     responseVerbosity: 'balanced',    // 'concise' | 'balanced' | 'detailed'
     codeDetailLevel: 'complete',      // 'logic' | 'snippets' | 'complete'
-    includeExamples: true
+    includeExamples: true,
+    // Response Rendering Settings (Phase 3)
+    renderMode: 'streaming'           // 'streaming' | 'batch'
 };
 
 const DEFAULT_KEYBINDS = null; // null means use system defaults

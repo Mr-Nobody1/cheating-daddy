@@ -105,6 +105,7 @@ export class CheatingDaddyApp extends LitElement {
         selectedScreenshotInterval: { type: String },
         selectedImageQuality: { type: String },
         layoutMode: { type: String },
+        renderMode: { type: String },
         _viewInstances: { type: Object, state: true },
         _isClickThrough: { state: true },
         _awaitingNewResponse: { state: true },
@@ -133,6 +134,13 @@ export class CheatingDaddyApp extends LitElement {
         this._currentResponseIsComplete = true;
         this.shouldAnimateResponse = false;
         this._storageLoaded = false;
+        
+        // Phase 3: Response rendering batching
+        this.renderMode = 'streaming'; // 'streaming' | 'batch'
+        this._pendingResponse = null;
+        this._isNewPendingResponse = false; // Flag for batch mode new response
+        this._updateDebounceTimer = null;
+        this._debounceDelay = 100; // ms between batched updates
 
         // Load from storage
         this._loadFromStorage();
@@ -160,6 +168,7 @@ export class CheatingDaddyApp extends LitElement {
             this.selectedScreenshotInterval = prefs.selectedScreenshotInterval || '5';
             this.selectedImageQuality = prefs.selectedImageQuality || 'medium';
             this.layoutMode = config.layout || 'normal';
+            this.renderMode = prefs.renderMode || 'streaming';
 
             this._storageLoaded = true;
             this.updateLayoutMode();
@@ -229,6 +238,10 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.on('update-response', (_, response) => {
                 this.updateCurrentResponse(response);
             });
+            ipcRenderer.on('generation-complete', () => {
+                // Flush any pending response when generation is complete
+                this.flushPendingResponse();
+            });
             ipcRenderer.on('update-status', (_, status) => {
                 this.setStatus(status);
             });
@@ -247,6 +260,7 @@ export class CheatingDaddyApp extends LitElement {
             const { ipcRenderer } = window.require('electron');
             ipcRenderer.removeAllListeners('new-response');
             ipcRenderer.removeAllListeners('update-response');
+            ipcRenderer.removeAllListeners('generation-complete');
             ipcRenderer.removeAllListeners('update-status');
             ipcRenderer.removeAllListeners('click-through-toggled');
             ipcRenderer.removeAllListeners('reconnect-failed');
@@ -264,24 +278,68 @@ export class CheatingDaddyApp extends LitElement {
     }
 
     addNewResponse(response) {
-        // Add a new response entry (first word of a new AI response)
+        // In batch mode, buffer the new response - don't show until complete
+        if (this.renderMode === 'batch') {
+            this._pendingResponse = response;
+            this._isNewPendingResponse = true; // Flag to indicate this needs to be added, not updated
+            this._awaitingNewResponse = false;
+            return;
+        }
+        
+        // In streaming mode, add immediately
         this.responses = [...this.responses, response];
         this.currentResponseIndex = this.responses.length - 1;
         this._awaitingNewResponse = false;
-        console.log('[addNewResponse] Added:', response);
         this.requestUpdate();
     }
 
     updateCurrentResponse(response) {
-        // Update the current response in place (streaming subsequent words)
-        if (this.responses.length > 0) {
-            this.responses = [...this.responses.slice(0, -1), response];
-            console.log('[updateCurrentResponse] Updated to:', response);
-        } else {
-            // Fallback: if no responses exist, add as new
-            this.addNewResponse(response);
+        // Store the pending response
+        this._pendingResponse = response;
+        
+        // In batch mode, wait until generation is complete
+        if (this.renderMode === 'batch') {
+            // Don't update until generationComplete
+            return;
         }
+        
+        // In streaming mode, debounce updates for smoother rendering
+        if (this._updateDebounceTimer) {
+            clearTimeout(this._updateDebounceTimer);
+        }
+        
+        this._updateDebounceTimer = setTimeout(() => {
+            this._applyPendingResponse();
+        }, this._debounceDelay);
+    }
+    
+    _applyPendingResponse() {
+        if (this._pendingResponse === null) return;
+        
+        // If this was a new response (batch mode first chunk), add it
+        if (this._isNewPendingResponse) {
+            this.responses = [...this.responses, this._pendingResponse];
+            this.currentResponseIndex = this.responses.length - 1;
+            this._isNewPendingResponse = false;
+        } else if (this.responses.length > 0) {
+            // Update existing response
+            this.responses = [...this.responses.slice(0, -1), this._pendingResponse];
+        } else {
+            // Fallback: add as new
+            this.responses = [this._pendingResponse];
+            this.currentResponseIndex = 0;
+        }
+        this._pendingResponse = null;
         this.requestUpdate();
+    }
+    
+    // Called when generation is complete - flush any pending response
+    flushPendingResponse() {
+        if (this._updateDebounceTimer) {
+            clearTimeout(this._updateDebounceTimer);
+            this._updateDebounceTimer = null;
+        }
+        this._applyPendingResponse();
     }
 
     // Header event handlers
@@ -472,6 +530,7 @@ export class CheatingDaddyApp extends LitElement {
                         .onScreenshotIntervalChange=${interval => this.handleScreenshotIntervalChange(interval)}
                         .onImageQualityChange=${quality => this.handleImageQualityChange(quality)}
                         .onLayoutModeChange=${layoutMode => this.handleLayoutModeChange(layoutMode)}
+                        @render-mode-changed=${e => { this.renderMode = e.detail.renderMode; }}
                     ></customize-view>
                 `;
 
