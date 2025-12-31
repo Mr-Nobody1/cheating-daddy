@@ -3,7 +3,7 @@ const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
 const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey } = require('../storage');
+const { getAvailableModel, incrementLimitCount, getApiKey, getPreferences } = require('../storage');
 
 // Conversation tracking variables
 let currentSessionId = null;
@@ -150,36 +150,16 @@ async function getEnabledTools() {
     return tools;
 }
 
-async function getStoredSetting(key, defaultValue) {
+function getStoredSetting(key, defaultValue) {
     try {
-        const windows = BrowserWindow.getAllWindows();
-        if (windows.length > 0) {
-            // Wait a bit for the renderer to be ready
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // Try to get setting from renderer process localStorage
-            const value = await windows[0].webContents.executeJavaScript(`
-                (function() {
-                    try {
-                        if (typeof localStorage === 'undefined') {
-                            console.log('localStorage not available yet for ${key}');
-                            return '${defaultValue}';
-                        }
-                        const stored = localStorage.getItem('${key}');
-                        console.log('Retrieved setting ${key}:', stored);
-                        return stored || '${defaultValue}';
-                    } catch (e) {
-                        console.error('Error accessing localStorage for ${key}:', e);
-                        return '${defaultValue}';
-                    }
-                })()
-            `);
+        const preferences = getPreferences();
+        const value = preferences[key];
+        if (value !== undefined) {
             return value;
         }
     } catch (error) {
         console.error('Error getting stored setting for', key, ':', error.message);
     }
-    console.log('Using default value for', key, ':', defaultValue);
     return defaultValue;
 }
 
@@ -211,10 +191,9 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
     // Get response quality settings
-    const verbosity = await getStoredSetting('responseVerbosity', 'balanced');
-    const codeDetailLevel = await getStoredSetting('codeDetailLevel', 'complete');
-    const includeExamplesStr = await getStoredSetting('includeExamples', 'true');
-    const includeExamples = includeExamplesStr === 'true';
+    const verbosity = getStoredSetting('responseVerbosity', 'balanced');
+    const codeDetailLevel = getStoredSetting('codeDetailLevel', 'complete');
+    const includeExamples = getStoredSetting('includeExamples', true);
 
     console.log('Response quality settings:', { verbosity, codeDetailLevel, includeExamples });
 
