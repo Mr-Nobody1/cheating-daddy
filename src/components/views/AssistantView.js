@@ -324,6 +324,7 @@ export class AssistantView extends LitElement {
         shouldAnimateResponse: { type: Boolean },
         flashCount: { type: Number },
         flashLiteCount: { type: Number },
+        isSendingText: { type: Boolean },
     };
 
     constructor() {
@@ -334,6 +335,7 @@ export class AssistantView extends LitElement {
         this.onSendText = () => {};
         this.flashCount = 0;
         this.flashLiteCount = 0;
+        this.isSendingText = false;
     }
 
     getProfileNames() {
@@ -508,10 +510,24 @@ export class AssistantView extends LitElement {
 
     async handleSendText() {
         const textInput = this.shadowRoot.querySelector('#textInput');
-        if (textInput && textInput.value.trim()) {
+        if (textInput && textInput.value.trim() && !this.isSendingText) {
             const message = textInput.value.trim();
             textInput.value = ''; // Clear input
-            await this.onSendText(message);
+            this.isSendingText = true;
+            this.requestUpdate();
+            
+            try {
+                const result = await this.onSendText(message);
+                if (!result?.success) {
+                    console.error('Text message failed:', result?.error);
+                    // Show error briefly - user will see it in console/status
+                }
+            } catch (error) {
+                console.error('Text message error:', error);
+            } finally {
+                this.isSendingText = false;
+                this.requestUpdate();
+            }
         }
     }
 
@@ -606,7 +622,13 @@ export class AssistantView extends LitElement {
                     </svg>
                 </button>
 
-                <input type="text" id="textInput" placeholder="Type a message to the AI..." @keydown=${this.handleTextKeydown} />
+                <input 
+                    type="text" 
+                    id="textInput" 
+                    placeholder="${this.isSendingText ? 'Sending message...' : 'Type a message to the AI...'}" 
+                    @keydown=${this.handleTextKeydown}
+                    ?disabled=${this.isSendingText}
+                />
 
                 <div class="screen-answer-btn-wrapper">
                     <div class="tooltip">

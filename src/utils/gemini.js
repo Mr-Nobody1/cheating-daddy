@@ -210,7 +210,19 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const enabledTools = await getEnabledTools();
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
-    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled);
+    // Get response quality settings
+    const verbosity = await getStoredSetting('responseVerbosity', 'balanced');
+    const codeDetailLevel = await getStoredSetting('codeDetailLevel', 'complete');
+    const includeExamplesStr = await getStoredSetting('includeExamples', 'true');
+    const includeExamples = includeExamplesStr === 'true';
+
+    console.log('Response quality settings:', { verbosity, codeDetailLevel, includeExamples });
+
+    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, {
+        verbosity,
+        codeDetailLevel,
+        includeExamples
+    });
 
     // Initialize new conversation session only on first connect
     if (!isReconnect) {
@@ -531,6 +543,49 @@ async function sendAudioToGemini(base64Data, geminiSessionRef) {
     }
 }
 
+// HTTP API fallback for text messages when realtime session is unavailable or slow
+async function sendTextToGeminiHttp(text) {
+    const model = getAvailableModel();
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        return { success: false, error: 'No API key configured' };
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: apiKey });
+
+        console.log(`Sending text to ${model} (streaming via HTTP)...`);
+        const response = await ai.models.generateContentStream({
+            model: model,
+            contents: [{ text: text }],
+        });
+
+        // Increment count after successful call
+        incrementLimitCount(model);
+
+        // Stream the response
+        let fullText = '';
+        let isFirst = true;
+        for await (const chunk of response) {
+            const chunkText = chunk.text;
+            if (chunkText) {
+                fullText += chunkText;
+                // Send to renderer - new response for first chunk, update for subsequent
+                sendToRenderer(isFirst ? 'new-response' : 'update-response', fullText);
+                isFirst = false;
+            }
+        }
+
+        console.log(`Text response completed from ${model}`);
+
+        return { success: true, text: fullText, model: model, method: 'http' };
+    } catch (error) {
+        console.error('Error sending text to Gemini HTTP:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 async function sendImageToGeminiHttp(base64Data, prompt) {
     // Get available model based on rate limits
     const model = getAvailableModel();
@@ -655,19 +710,43 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 
     ipcMain.handle('send-text-message', async (event, text) => {
-        if (!geminiSessionRef.current) return { success: false, error: 'No active Gemini session' };
+        if (!text || typeof text !== 'string' || text.trim().length === 0) {
+            return { success: false, error: 'Invalid text message' };
+        }
 
-        try {
-            if (!text || typeof text !== 'string' || text.trim().length === 0) {
-                return { success: false, error: 'Invalid text message' };
+        const trimmedText = text.trim();
+        console.log('Sending text message:', trimmedText);
+
+        // Try realtime session first with a timeout
+        if (geminiSessionRef.current) {
+            try {
+                // Create a promise that rejects after timeout
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Realtime session timeout')), 10000);
+                });
+
+                // Race between sending and timeout
+                await Promise.race([
+                    geminiSessionRef.current.sendRealtimeInput({ text: trimmedText }),
+                    timeoutPromise
+                ]);
+                
+                console.log('Text message sent via realtime session');
+                return { success: true, method: 'realtime' };
+            } catch (realtimeError) {
+                console.warn('Realtime session failed or timed out, falling back to HTTP API:', realtimeError.message);
+                // Fall through to HTTP API fallback
             }
+        }
 
-            console.log('Sending text message:', text);
-            await geminiSessionRef.current.sendRealtimeInput({ text: text.trim() });
-            return { success: true };
-        } catch (error) {
-            console.error('Error sending text:', error);
-            return { success: false, error: error.message };
+        // Fallback to HTTP API for text-only messages
+        try {
+            console.log('Using HTTP API fallback for text message...');
+            const result = await sendTextToGeminiHttp(trimmedText);
+            return result;
+        } catch (httpError) {
+            console.error('HTTP API also failed:', httpError);
+            return { success: false, error: httpError.message };
         }
     });
 

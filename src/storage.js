@@ -25,7 +25,11 @@ const DEFAULT_PREFERENCES = {
     audioMode: 'speaker_only',
     fontSize: 'medium',
     backgroundTransparency: 0.8,
-    googleSearchEnabled: false
+    googleSearchEnabled: false,
+    // Response Quality Settings (Phase 1)
+    responseVerbosity: 'balanced',    // 'concise' | 'balanced' | 'detailed'
+    codeDetailLevel: 'complete',      // 'logic' | 'snippets' | 'complete'
+    includeExamples: true
 };
 
 const DEFAULT_KEYBINDS = null; // null means use system defaults

@@ -553,6 +553,9 @@ export class CustomizeView extends LitElement {
         isClearing: { type: Boolean },
         clearStatusMessage: { type: String },
         clearStatusType: { type: String },
+        responseVerbosity: { type: String },
+        codeDetailLevel: { type: String },
+        includeExamples: { type: Boolean },
     };
 
     constructor() {
@@ -593,6 +596,11 @@ export class CustomizeView extends LitElement {
         // Theme default
         this.theme = 'dark';
 
+        // Response Quality defaults
+        this.responseVerbosity = 'balanced';
+        this.codeDetailLevel = 'complete';
+        this.includeExamples = true;
+
         this._loadFromStorage();
     }
 
@@ -608,6 +616,7 @@ export class CustomizeView extends LitElement {
     getSidebarSections() {
         return [
             { id: 'profile', name: 'Profile', icon: 'user' },
+            { id: 'quality', name: 'Response Quality', icon: 'sparkles' },
             { id: 'appearance', name: 'Appearance', icon: 'display' },
             { id: 'audio', name: 'Audio', icon: 'mic' },
             { id: 'language', name: 'Language', icon: 'globe' },
@@ -664,6 +673,9 @@ export class CustomizeView extends LitElement {
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>`,
+            sparkles: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z"></path>
+            </svg>`,
         };
         return icons[icon] || '';
     }
@@ -681,6 +693,10 @@ export class CustomizeView extends LitElement {
             this.audioMode = prefs.audioMode ?? 'speaker_only';
             this.customPrompt = prefs.customPrompt ?? '';
             this.theme = prefs.theme ?? 'dark';
+            // Response Quality settings
+            this.responseVerbosity = prefs.responseVerbosity ?? 'balanced';
+            this.codeDetailLevel = prefs.codeDetailLevel ?? 'complete';
+            this.includeExamples = prefs.includeExamples ?? true;
 
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
@@ -1079,6 +1095,98 @@ export class CustomizeView extends LitElement {
         root.style.setProperty('--response-font-size', `${this.fontSize}px`);
     }
 
+    // Response Quality handlers
+    async handleVerbosityChange(e) {
+        this.responseVerbosity = e.target.value;
+        await cheatingDaddy.storage.updatePreference('responseVerbosity', this.responseVerbosity);
+        this.requestUpdate();
+    }
+
+    async handleCodeDetailChange(e) {
+        this.codeDetailLevel = e.target.value;
+        await cheatingDaddy.storage.updatePreference('codeDetailLevel', this.codeDetailLevel);
+        this.requestUpdate();
+    }
+
+    async handleIncludeExamplesChange(e) {
+        this.includeExamples = e.target.checked;
+        await cheatingDaddy.storage.updatePreference('includeExamples', this.includeExamples);
+        this.requestUpdate();
+    }
+
+    renderQualitySection() {
+        const verbosityOptions = [
+            { value: 'concise', name: 'Concise', description: 'Short, direct answers (1-3 sentences)' },
+            { value: 'balanced', name: 'Balanced', description: 'Moderate detail with examples (3-6 sentences)' },
+            { value: 'detailed', name: 'Detailed', description: 'Comprehensive answers with thorough explanations' },
+        ];
+
+        const codeDetailOptions = [
+            { value: 'logic', name: 'Logic Only', description: 'Pseudocode and approach explanation' },
+            { value: 'snippets', name: 'Key Snippets', description: 'Core logic without boilerplate' },
+            { value: 'complete', name: 'Complete Code', description: 'Full working implementations' },
+        ];
+
+        return html`
+            <div class="content-header">Response Quality</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">
+                        Response Verbosity
+                        <span class="current-selection">${verbosityOptions.find(v => v.value === this.responseVerbosity)?.name || 'Balanced'}</span>
+                    </label>
+                    <select class="form-control" .value=${this.responseVerbosity} @change=${this.handleVerbosityChange}>
+                        ${verbosityOptions.map(option => html`
+                            <option value=${option.value} ?selected=${this.responseVerbosity === option.value}>
+                                ${option.name} - ${option.description}
+                            </option>
+                        `)}
+                    </select>
+                    <div class="form-description">
+                        Controls how detailed the AI responses should be.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Code Detail Level
+                        <span class="current-selection">${codeDetailOptions.find(c => c.value === this.codeDetailLevel)?.name || 'Complete'}</span>
+                    </label>
+                    <select class="form-control" .value=${this.codeDetailLevel} @change=${this.handleCodeDetailChange}>
+                        ${codeDetailOptions.map(option => html`
+                            <option value=${option.value} ?selected=${this.codeDetailLevel === option.value}>
+                                ${option.name} - ${option.description}
+                            </option>
+                        `)}
+                    </select>
+                    <div class="form-description">
+                        For programming questions, controls how much code to show.
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input 
+                            type="checkbox" 
+                            id="includeExamples" 
+                            class="checkbox-input"
+                            .checked=${this.includeExamples}
+                            @change=${this.handleIncludeExamplesChange}
+                        />
+                        <label for="includeExamples" class="checkbox-label">Include Examples</label>
+                    </div>
+                    <div class="form-description">
+                        When enabled, AI will include example inputs/outputs for code solutions.
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-note">
+                Changes apply to new sessions only. Restart the session to see effects.
+            </div>
+        `
+    }
+
     renderProfileSection() {
         const profiles = this.getProfiles();
         const profileNames = this.getProfileNames();
@@ -1383,6 +1491,8 @@ export class CustomizeView extends LitElement {
         switch (this.activeSection) {
             case 'profile':
                 return this.renderProfileSection();
+            case 'quality':
+                return this.renderQualitySection();
             case 'appearance':
                 return this.renderAppearanceSection();
             case 'audio':
