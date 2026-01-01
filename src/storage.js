@@ -31,7 +31,27 @@ const DEFAULT_PREFERENCES = {
     codeDetailLevel: 'complete',      // 'logic' | 'snippets' | 'complete'
     includeExamples: true,
     // Response Rendering Settings (Phase 3)
-    renderMode: 'streaming'           // 'streaming' | 'batch'
+    renderMode: 'streaming',          // 'streaming' | 'batch'
+    // Model Selection Settings (Phase 2)
+    selectedModel: 'flash'            // 'flash' | 'pro'
+};
+
+// Available Gemini models for realtime audio
+const AVAILABLE_MODELS = {
+    flash: {
+        name: 'Gemini 2.5 Flash',
+        id: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        tier: 'free',
+        dailyLimit: 20,
+        description: 'Fast, optimized for speed. Free tier: 20 sessions/day'
+    },
+    pro: {
+        name: 'Gemini 2.5 Pro',
+        id: 'gemini-2.5-pro-native-audio-preview',
+        tier: 'paid',
+        dailyLimit: null,
+        description: 'Most capable. Requires paid API key, no daily limit'
+    }
 };
 
 const DEFAULT_KEYBINDS = null; // null means use system defaults
@@ -457,5 +477,8 @@ module.exports = {
     deleteAllSessions,
 
     // Clear all
-    clearAllData
+    clearAllData,
+
+    // Constants
+    AVAILABLE_MODELS
 };

@@ -18,7 +18,8 @@ A real-time AI assistant that provides contextual help during video calls, inter
 
 ## Features
 
-- **Live AI Assistance**: Real-time help powered by Google Gemini 2.5 Flash
+- **Live AI Assistance**: Real-time help powered by Google Gemini 2.5 (Flash or Pro)
+- **Model Selection**: Choose between Gemini 2.5 Flash (free, 20/day) or Pro (paid, unlimited)
 - **Screen & Audio Capture**: Analyzes what you see and hear for contextual responses
 - **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation, Exam
 - **Response Quality Settings**: Configure verbosity (Concise/Balanced/Detailed) and code detail level
@@ -37,11 +38,28 @@ A real-time AI assistant that provides contextual help during video calls, inter
 ## Usage
 
 1. Enter your Gemini API key in the main window
-2. Choose your profile and language in settings
-3. Configure response quality settings (verbosity, code detail level, render mode)
-4. Click "Start Session" to begin
-5. Position the window using keyboard shortcuts
-6. The AI will provide real-time assistance based on your screen and what interview asks
+2. Choose your AI model (Flash or Pro) in Settings → Model
+3. Choose your profile and language in settings
+4. Configure response quality settings (verbosity, code detail level, render mode)
+5. Click "Start Session" to begin
+6. Position the window using keyboard shortcuts
+7. The AI will provide real-time assistance based on your screen and what interview asks
+
+## Model Settings
+
+Access via **Settings → Model**:
+
+- **Gemini 2.5 Flash** (Default)
+  - Free tier: 20 sessions per day
+  - Fast, optimized for speed
+  - Best for most use cases
+
+- **Gemini 2.5 Pro**
+  - Requires paid API key
+  - Unlimited sessions
+  - Most capable model for complex scenarios
+
+> Note: Model changes require starting a new session to take effect.
 
 ## Response Quality Settings
 

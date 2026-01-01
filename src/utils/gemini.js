@@ -3,7 +3,7 @@ const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
 const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey, getPreferences } = require('../storage');
+const { getAvailableModel, incrementLimitCount, getApiKey, getPreferences, AVAILABLE_MODELS } = require('../storage');
 
 // Conversation tracking variables
 let currentSessionId = null;
@@ -163,6 +163,18 @@ function getStoredSetting(key, defaultValue) {
     return defaultValue;
 }
 
+function getSelectedModelId() {
+    const modelKey = getStoredSetting('selectedModel', 'flash');
+    const modelConfig = AVAILABLE_MODELS[modelKey];
+    if (modelConfig) {
+        console.log(`Using model: ${modelConfig.name} (${modelConfig.id})`);
+        return modelConfig.id;
+    }
+    // Fallback to Flash if invalid key
+    console.warn(`Invalid model key '${modelKey}', falling back to Flash`);
+    return AVAILABLE_MODELS.flash.id;
+}
+
 async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
@@ -210,7 +222,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
     try {
         const session = await client.live.connect({
-            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            model: getSelectedModelId(),
             callbacks: {
                 onopen: function () {
                     sendToRenderer('update-status', 'Live session connected');

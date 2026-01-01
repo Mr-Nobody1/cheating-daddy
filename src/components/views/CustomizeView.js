@@ -557,6 +557,7 @@ export class CustomizeView extends LitElement {
         codeDetailLevel: { type: String },
         includeExamples: { type: Boolean },
         renderMode: { type: String },
+        selectedModel: { type: String },
     };
 
     constructor() {
@@ -602,6 +603,7 @@ export class CustomizeView extends LitElement {
         this.codeDetailLevel = 'complete';
         this.includeExamples = true;
         this.renderMode = 'streaming';
+        this.selectedModel = 'flash';
 
         this._loadFromStorage();
     }
@@ -619,6 +621,7 @@ export class CustomizeView extends LitElement {
         return [
             { id: 'profile', name: 'Profile', icon: 'user' },
             { id: 'quality', name: 'Response Quality', icon: 'sparkles' },
+            { id: 'model', name: 'Model', icon: 'cpu' },
             { id: 'appearance', name: 'Appearance', icon: 'display' },
             { id: 'audio', name: 'Audio', icon: 'mic' },
             { id: 'language', name: 'Language', icon: 'globe' },
@@ -678,6 +681,18 @@ export class CustomizeView extends LitElement {
             sparkles: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z"></path>
             </svg>`,
+            cpu: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                <rect x="9" y="9" width="6" height="6"></rect>
+                <line x1="9" y1="1" x2="9" y2="4"></line>
+                <line x1="15" y1="1" x2="15" y2="4"></line>
+                <line x1="9" y1="20" x2="9" y2="23"></line>
+                <line x1="15" y1="20" x2="15" y2="23"></line>
+                <line x1="20" y1="9" x2="23" y2="9"></line>
+                <line x1="20" y1="14" x2="23" y2="14"></line>
+                <line x1="1" y1="9" x2="4" y2="9"></line>
+                <line x1="1" y1="14" x2="4" y2="14"></line>
+            </svg>`,
         };
         return icons[icon] || '';
     }
@@ -700,6 +715,7 @@ export class CustomizeView extends LitElement {
             this.codeDetailLevel = prefs.codeDetailLevel ?? 'complete';
             this.includeExamples = prefs.includeExamples ?? true;
             this.renderMode = prefs.renderMode ?? 'streaming';
+            this.selectedModel = prefs.selectedModel ?? 'flash';
 
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
@@ -1131,6 +1147,59 @@ export class CustomizeView extends LitElement {
         this.requestUpdate();
     }
 
+    async handleModelChange(e) {
+        this.selectedModel = e.target.value;
+        await cheatingDaddy.storage.updatePreference('selectedModel', this.selectedModel);
+        this.requestUpdate();
+    }
+
+    renderModelSection() {
+        // Get available models from storage
+        const models = {
+            flash: {
+                name: 'Gemini 2.5 Flash',
+                tier: 'Free',
+                limit: '20 sessions/day',
+                description: 'Fast, optimized for speed'
+            },
+            pro: {
+                name: 'Gemini 2.5 Pro',
+                tier: 'Paid',
+                limit: 'Unlimited',
+                description: 'Most capable, requires paid API key'
+            }
+        };
+
+        const currentModel = models[this.selectedModel] || models.flash;
+
+        return html`
+            <div class="content-header">Model Settings</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">
+                        AI Model
+                        <span class="current-selection">${currentModel.name}</span>
+                    </label>
+                    <select class="form-control" .value=${this.selectedModel} @change=${this.handleModelChange}>
+                        ${Object.entries(models).map(([key, model]) => html`
+                            <option value=${key} ?selected=${this.selectedModel === key}>
+                                ${model.name} - ${model.tier} (${model.limit})
+                            </option>
+                        `)}
+                    </select>
+                    <div class="form-description">
+                        ${currentModel.description}. ${currentModel.tier === 'Paid' ? 'Requires paid Gemini API key.' : ''}
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-note">
+                Model changes apply to new sessions. Restart the session to use the selected model.
+            </div>
+        `;
+    }
+
+
     renderQualitySection() {
         const verbosityOptions = [
             { value: 'concise', name: 'Concise', description: 'Short, direct answers (1-3 sentences)' },
@@ -1528,6 +1597,8 @@ export class CustomizeView extends LitElement {
                 return this.renderProfileSection();
             case 'quality':
                 return this.renderQualitySection();
+            case 'model':
+                return this.renderModelSection();
             case 'appearance':
                 return this.renderAppearanceSection();
             case 'audio':
