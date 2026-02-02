@@ -18,7 +18,7 @@ A real-time AI assistant that provides contextual help during video calls, inter
 
 ## Features
 
-- **Live AI Assistance**: Real-time help powered by Google Gemini 2.5 (Flash or Pro)
+- **Live AI Assistance**: Real-time help powered by Google Gemini 2.5 (Flash or Pro) with Gemini 3 Pro Preview for vision
 - **Model Selection**: Choose between Gemini 2.5 Flash (free, 20/day) or Pro (paid, unlimited)
 - **Screen & Audio Capture**: Analyzes what you see and hear for contextual responses
 - **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation, Exam
@@ -70,7 +70,7 @@ Access via **Settings → Response Quality**:
 - **Include Examples**: Toggle example inputs/outputs for code solutions
 - **Render Mode**: Streaming (progressive display) or Batch (complete response at once)
 
-> Note: Verbosity and code detail settings require starting a new session to take effect.
+> Note: Verbosity and code detail settings are applied instantly during an active session.
 
 ## Keyboard Shortcuts
 

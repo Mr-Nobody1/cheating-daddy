@@ -314,6 +314,38 @@ export class AssistantView extends LitElement {
             opacity: 0.5;
             font-size: 10px;
         }
+
+        .pending-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            padding: 12px;
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-primary);
+        }
+
+        .pending-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--text-secondary);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+
+        .screenshot-icon-inline {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            opacity: 0.7;
+        }
     `;
 
     static properties = {
@@ -325,6 +357,7 @@ export class AssistantView extends LitElement {
         flashCount: { type: Number },
         flashLiteCount: { type: Number },
         isSendingText: { type: Boolean },
+        isAnalyzingScreen: { type: Boolean },
     };
 
     constructor() {
@@ -336,6 +369,7 @@ export class AssistantView extends LitElement {
         this.flashCount = 0;
         this.flashLiteCount = 0;
         this.isSendingText = false;
+        this.isAnalyzingScreen = false;
     }
 
     getProfileNames() {
@@ -556,6 +590,8 @@ export class AssistantView extends LitElement {
 
     async handleScreenAnswer() {
         if (window.captureManualScreenshot) {
+            this.isAnalyzingScreen = true;
+            this.requestUpdate();
             window.captureManualScreenshot();
             // Reload limits after a short delay to catch the update
             setTimeout(() => this.loadLimits(), 1000);
@@ -606,6 +642,19 @@ export class AssistantView extends LitElement {
 
         return html`
             <div class="response-container" id="responseContainer"></div>
+
+            ${this.isAnalyzingScreen || this.isSendingText ? html`
+                <div class="pending-indicator">
+                    <div class="pending-dot"></div>
+                    ${this.isAnalyzingScreen ? html`
+                        <svg class="screenshot-icon-inline" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M15 4V2M15 4H18C19.1046 4 20 4.89543 20 6V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V6C4 4.89543 4.89543 4 6 4H9M15 4L13.5 1.5M9 4V2M9 4L10.5 1.5M12 12V12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span>Analyzing Screen...</span>
+                    ` : html`<span>Assistant is thinking...</span>`}
+                </div>
+            ` : ''}
 
             <div class="text-input-container">
                 <button class="nav-button" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0}>

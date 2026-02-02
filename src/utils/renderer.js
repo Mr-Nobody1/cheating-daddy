@@ -521,6 +521,12 @@ async function captureManualScreenshot(imageQuality = null) {
         return;
     }
 
+    // Notify UI that analysis is starting
+    if (cheatingDaddy.element()) {
+        cheatingDaddy.element().isAnalyzingScreen = true;
+        cheatingDaddy.element().requestUpdate();
+    }
+
     // Lazy init of video element
     if (!hiddenVideo) {
         hiddenVideo = document.createElement('video');
@@ -580,18 +586,32 @@ async function captureManualScreenshot(imageQuality = null) {
                     return;
                 }
 
-                // Send image with prompt to HTTP API (response streams via IPC events)
-                const result = await ipcRenderer.invoke('send-image-content', {
-                    data: base64data,
-                    prompt: MANUAL_SCREENSHOT_PROMPT,
-                });
+                try {
+                    // Send image with prompt to HTTP API (response streams via IPC events)
+                    const result = await ipcRenderer.invoke('send-image-content', {
+                        data: base64data,
+                        prompt: MANUAL_SCREENSHOT_PROMPT,
+                    });
 
-                if (result.success) {
-                    console.log(`Image response completed from ${result.model}`);
-                    // Response already displayed via streaming events (new-response/update-response)
-                } else {
-                    console.error('Failed to get image response:', result.error);
-                    cheatingDaddy.addNewResponse(`Error: ${result.error}`);
+                    if (result.success) {
+                        console.log(`Image response completed from ${result.model}`);
+                        // Response already displayed via streaming events (new-response/update-response)
+                    } else {
+                        console.error('Failed to get image response:', result.error);
+                        cheatingDaddy.addNewResponse(`Error: ${result.error}`);
+                        // Clear pending state on error
+                        if (cheatingDaddy.element()) {
+                            cheatingDaddy.element().isAnalyzingScreen = false;
+                            cheatingDaddy.element().requestUpdate();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error during manual screenshot:', error);
+                    // Clear pending state on error
+                    if (cheatingDaddy.element()) {
+                        cheatingDaddy.element().isAnalyzingScreen = false;
+                        cheatingDaddy.element().requestUpdate();
+                    }
                 }
             };
             reader.readAsDataURL(blob);

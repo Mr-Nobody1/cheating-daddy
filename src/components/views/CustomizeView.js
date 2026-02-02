@@ -839,6 +839,12 @@ export class CustomizeView extends LitElement {
     async handleCustomPromptInput(e) {
         this.customPrompt = e.target.value;
         await cheatingDaddy.storage.updatePreference('customPrompt', e.target.value);
+        
+        // Notify backend to refresh system prompt if session is active
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.invoke('update-ai-settings');
+        }
     }
 
     async handleAudioModeSelect(e) {
@@ -1118,19 +1124,29 @@ export class CustomizeView extends LitElement {
     async handleVerbosityChange(e) {
         this.responseVerbosity = e.target.value;
         await cheatingDaddy.storage.updatePreference('responseVerbosity', this.responseVerbosity);
+        this._notifySettingsChanged();
         this.requestUpdate();
     }
 
     async handleCodeDetailChange(e) {
         this.codeDetailLevel = e.target.value;
         await cheatingDaddy.storage.updatePreference('codeDetailLevel', this.codeDetailLevel);
+        this._notifySettingsChanged();
         this.requestUpdate();
     }
 
     async handleIncludeExamplesChange(e) {
         this.includeExamples = e.target.checked;
         await cheatingDaddy.storage.updatePreference('includeExamples', this.includeExamples);
+        this._notifySettingsChanged();
         this.requestUpdate();
+    }
+
+    _notifySettingsChanged() {
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.invoke('update-ai-settings');
+        }
     }
 
     async handleRenderModeChange(e) {
@@ -1194,7 +1210,7 @@ export class CustomizeView extends LitElement {
             </div>
 
             <div class="settings-note">
-                Model changes apply to new sessions. Restart the session to use the selected model.
+                Model changes apply to new sessions.
             </div>
         `;
     }
@@ -1286,7 +1302,7 @@ export class CustomizeView extends LitElement {
             </div>
 
             <div class="settings-note">
-                Changes apply to new sessions only. Restart the session to see effects.
+                Changes apply immediately to the current session.
             </div>
         `
     }

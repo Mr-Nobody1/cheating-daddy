@@ -109,6 +109,7 @@ export class CheatingDaddyApp extends LitElement {
         _viewInstances: { type: Object, state: true },
         _isClickThrough: { state: true },
         _awaitingNewResponse: { state: true },
+        isAnalyzingScreen: { type: Boolean },
         shouldAnimateResponse: { type: Boolean },
         _storageLoaded: { state: true },
     };
@@ -131,6 +132,7 @@ export class CheatingDaddyApp extends LitElement {
         this._viewInstances = new Map();
         this._isClickThrough = false;
         this._awaitingNewResponse = false;
+        this.isAnalyzingScreen = false;
         this._currentResponseIsComplete = true;
         this.shouldAnimateResponse = false;
         this._storageLoaded = false;
@@ -241,6 +243,8 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.on('generation-complete', () => {
                 // Flush any pending response when generation is complete
                 this.flushPendingResponse();
+                this.isAnalyzingScreen = false;
+                this.requestUpdate();
             });
             ipcRenderer.on('update-status', (_, status) => {
                 this.setStatus(status);
@@ -290,6 +294,7 @@ export class CheatingDaddyApp extends LitElement {
         this.responses = [...this.responses, response];
         this.currentResponseIndex = this.responses.length - 1;
         this._awaitingNewResponse = false;
+        this.isAnalyzingScreen = false;
         this.requestUpdate();
     }
 
@@ -546,12 +551,14 @@ export class CheatingDaddyApp extends LitElement {
                         .responses=${this.responses}
                         .currentResponseIndex=${this.currentResponseIndex}
                         .selectedProfile=${this.selectedProfile}
+                        .isAnalyzingScreen=${this.isAnalyzingScreen}
                         .onSendText=${message => this.handleSendText(message)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @response-animation-complete=${() => {
                             this.shouldAnimateResponse = false;
                             this._currentResponseIsComplete = true;
+                            this.isAnalyzingScreen = false;
                             console.log('[response-animation-complete] Marked current response as complete');
                             this.requestUpdate();
                         }}

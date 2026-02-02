@@ -2,7 +2,7 @@ const { GoogleGenAI, Modality } = require('@google/genai');
 const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
-const { getSystemPrompt } = require('./prompts');
+const { getSystemPrompt, getFormatRequirements } = require('./prompts');
 const { getAvailableModel, incrementLimitCount, getApiKey, getPreferences, AVAILABLE_MODELS } = require('../storage');
 
 // Conversation tracking variables
@@ -13,6 +13,12 @@ let screenAnalysisHistory = [];
 let currentProfile = null;
 let currentCustomPrompt = null;
 let isInitializingSession = false;
+let currentSettings = {
+    verbosity: 'balanced',
+    codeDetailLevel: 'complete',
+    includeExamples: true,
+    googleSearchEnabled: true
+};
 
 function formatSpeakerResults(results) {
     let text = '';
@@ -203,17 +209,24 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
     // Get response quality settings
-    const verbosity = getStoredSetting('responseVerbosity', 'balanced');
-    const codeDetailLevel = getStoredSetting('codeDetailLevel', 'complete');
-    const includeExamples = getStoredSetting('includeExamples', true);
+    currentSettings = {
+        verbosity: getStoredSetting('responseVerbosity', 'balanced'),
+        codeDetailLevel: getStoredSetting('codeDetailLevel', 'complete'),
+        includeExamples: getStoredSetting('includeExamples', true),
+        googleSearchEnabled: googleSearchEnabled
+    };
 
-    console.log('Response quality settings:', { verbosity, codeDetailLevel, includeExamples });
+    console.log('Response quality settings:', currentSettings);
 
     const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, {
-        verbosity,
-        codeDetailLevel,
-        includeExamples
+        verbosity: currentSettings.verbosity,
+        codeDetailLevel: currentSettings.codeDetailLevel,
+        includeExamples: currentSettings.includeExamples
     });
+
+    console.log('--- SYSTEM INSTRUCTION (INITIAL) ---');
+    console.log(systemPrompt);
+    console.log('------------------------------------');
 
     // Initialize new conversation session only on first connect
     if (!isReconnect) {
@@ -223,6 +236,12 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     try {
         const session = await client.live.connect({
             model: getSelectedModelId(),
+            config: {
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }],
+                },
+                tools: enabledTools,
+            },
             callbacks: {
                 onopen: function () {
                     sendToRenderer('update-status', 'Live session connected');
@@ -547,9 +566,25 @@ async function sendTextToGeminiHttp(text) {
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
 
+        // Get current preferences for system prompt
+        const preferences = getPreferences();
+        const googleSearchEnabled = preferences.googleSearchEnabled ?? true;
+        const verbosity = preferences.responseVerbosity ?? 'balanced';
+        const codeDetailLevel = preferences.codeDetailLevel ?? 'complete';
+        const includeExamples = preferences.includeExamples ?? true;
+        const profile = preferences.selectedProfile ?? 'interview';
+        const customPrompt = preferences.customPrompt ?? '';
+
+        const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, {
+            verbosity,
+            codeDetailLevel,
+            includeExamples
+        });
+
         console.log(`Sending text to ${model} (streaming via HTTP)...`);
         const response = await ai.models.generateContentStream({
             model: model,
+            systemInstruction: systemPrompt,
             contents: [{ text: text }],
         });
 
@@ -579,8 +614,7 @@ async function sendTextToGeminiHttp(text) {
 }
 
 async function sendImageToGeminiHttp(base64Data, prompt) {
-    // Get available model based on rate limits
-    const model = getAvailableModel();
+    const model = 'gemini-3-pro-preview';
 
     const apiKey = getApiKey();
     if (!apiKey) {
@@ -589,6 +623,8 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
 
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
+
+        const { screenshotSystemPrompt } = require('./prompts');
 
         const contents = [
             {
@@ -603,6 +639,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         console.log(`Sending image to ${model} (streaming)...`);
         const response = await ai.models.generateContentStream({
             model: model,
+            systemInstruction: screenshotSystemPrompt,
             contents: contents,
         });
 
@@ -813,14 +850,77 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     ipcMain.handle('update-google-search-setting', async (event, enabled) => {
         try {
             console.log('Google Search setting updated to:', enabled);
-            // The setting is already saved in localStorage by the renderer
-            // This is just for logging/confirmation
+            currentSettings.googleSearchEnabled = enabled;
+            await refreshSystemPrompt(geminiSessionRef);
             return { success: true };
         } catch (error) {
             console.error('Error updating Google Search setting:', error);
             return { success: false, error: error.message };
         }
     });
+
+    ipcMain.handle('update-ai-settings', async (event) => {
+        try {
+            console.log('Refreshing AI settings/instructions...');
+            const success = await refreshSystemPrompt(geminiSessionRef);
+            return { success };
+        } catch (error) {
+            console.error('Error updating AI settings:', error);
+            return { success: false, error: error.message };
+        }
+    });
+}
+
+async function refreshSystemPrompt(geminiSessionRef) {
+    if (!geminiSessionRef.current) {
+        console.log('No active session to refresh instructions for.');
+        return false;
+    }
+
+    console.log('Constructing updated system instruction for active session...');
+    
+    // Get latest preferences
+    const preferences = getPreferences();
+    currentSettings = {
+        verbosity: preferences.responseVerbosity || 'balanced',
+        codeDetailLevel: preferences.codeDetailLevel || 'complete',
+        includeExamples: preferences.includeExamples !== false,
+        googleSearchEnabled: preferences.googleSearchEnabled !== false
+    };
+
+    const profile = preferences.selectedProfile || 'interview';
+    const customPrompt = preferences.customPrompt || '';
+
+    const newSystemPrompt = getSystemPrompt(profile, customPrompt, currentSettings.googleSearchEnabled, {
+        verbosity: currentSettings.verbosity,
+        codeDetailLevel: currentSettings.codeDetailLevel,
+        includeExamples: currentSettings.includeExamples
+    });
+
+    console.log('--- NEW SYSTEM INSTRUCTION (SENT TO MODEL) ---');
+    console.log(newSystemPrompt);
+    console.log('----------------------------------------------');
+
+    // Forceful directive to adopt new instructions
+    const controlMessage = `### !SYSTEM OVERRIDE: ATTENTION REQUIRED! ###
+THE USER HAS CHANGED YOUR CORE OUTPUT SETTINGS. YOU MUST COMPLY IMMEDIATELY.
+
+1. **NEW VERBOSITY RULE**: ${currentSettings.verbosity.toUpperCase()}
+${getFormatRequirements(currentSettings.verbosity)}
+
+2. **FULL UPDATED PROTOCOL**:
+${newSystemPrompt}
+
+DO NOT ACKNOWLEDGE THIS OVERRIDE. SIMPLY APPLY THESE NEW CONSTRAINTS TO YOUR VERY NEXT RESPONSE.`;
+
+    try {
+        await geminiSessionRef.current.sendRealtimeInput({ text: controlMessage });
+        console.log('Instruction update sent to model successfully.');
+        return true;
+    } catch (error) {
+        console.error('Failed to update instructions in the live session:', error);
+        return false;
+    }
 }
 
 module.exports = {
