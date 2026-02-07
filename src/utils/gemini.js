@@ -692,6 +692,59 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
     }
 }
 
+async function sendMultiImageToGeminiHttp(base64Images, prompt) {
+    const model = 'gemini-3-pro-preview';
+
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        return { success: false, error: 'No API key configured' };
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: apiKey });
+        const { screenshotSystemPrompt } = require('./prompts');
+
+        const contents = [{ text: prompt }];
+        base64Images.forEach((base64Data, index) => {
+            contents.push({ text: `Screenshot S${index + 1}` });
+            contents.push({
+                inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: base64Data,
+                },
+            });
+        });
+
+        console.log(`Sending ${base64Images.length} images to ${model} (streaming)...`);
+        const response = await ai.models.generateContentStream({
+            model: model,
+            systemInstruction: screenshotSystemPrompt,
+            contents: contents,
+        });
+
+        incrementLimitCount(model);
+
+        let fullText = '';
+        let isFirst = true;
+        for await (const chunk of response) {
+            const chunkText = chunk.text;
+            if (chunkText) {
+                fullText += chunkText;
+                sendToRenderer(isFirst ? 'new-response' : 'update-response', fullText);
+                isFirst = false;
+            }
+        }
+
+        console.log(`Multi-image response completed from ${model}`);
+        saveScreenAnalysis(`${prompt}\n\n[Batch screenshots: ${base64Images.length}]`, fullText, model);
+
+        return { success: true, text: fullText, model: model };
+    } catch (error) {
+        console.error('Error sending multi-image content to Gemini HTTP:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 function setupGeminiIpcHandlers(geminiSessionRef) {
     // Store the geminiSessionRef globally for reconnection access
     global.geminiSessionRef = geminiSessionRef;
@@ -755,6 +808,36 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             return result;
         } catch (error) {
             console.error('Error sending image:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('send-multi-image-content', async (event, { images, prompt }) => {
+        try {
+            if (!Array.isArray(images) || images.length === 0) {
+                return { success: false, error: 'No images provided' };
+            }
+
+            if (images.length > 8) {
+                return { success: false, error: 'Too many images in one batch (max 8)' };
+            }
+
+            for (const imageData of images) {
+                if (!imageData || typeof imageData !== 'string') {
+                    return { success: false, error: 'Invalid image data in batch' };
+                }
+
+                const buffer = Buffer.from(imageData, 'base64');
+                if (buffer.length < 1000) {
+                    return { success: false, error: 'One or more images are too small' };
+                }
+            }
+
+            process.stdout.write('!');
+            const result = await sendMultiImageToGeminiHttp(images, prompt || '');
+            return result;
+        } catch (error) {
+            console.error('Error sending multi-image batch:', error);
             return { success: false, error: error.message };
         }
     });

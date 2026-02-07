@@ -110,6 +110,8 @@ function getDefaultKeybinds() {
         toggleVisibility: isMac ? 'Cmd+\\' : 'Ctrl+\\',
         toggleClickThrough: isMac ? 'Cmd+M' : 'Ctrl+M',
         nextStep: isMac ? 'Cmd+Enter' : 'Ctrl+Enter',
+        captureBatch: isMac ? 'Cmd+Shift+S' : 'Ctrl+Shift+S',
+        sendBatch: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
         previousResponse: isMac ? 'Cmd+[' : 'Ctrl+[',
         nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
         scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
@@ -207,13 +209,8 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
             globalShortcut.register(keybinds.nextStep, async () => {
                 console.log('Next step shortcut triggered');
                 try {
-                    // Determine the shortcut key format
-                    const isMac = process.platform === 'darwin';
-                    const shortcutKey = isMac ? 'cmd+enter' : 'ctrl+enter';
-
-                    // Use the new handleShortcut function
                     mainWindow.webContents.executeJavaScript(`
-                        cheatingDaddy.handleShortcut('${shortcutKey}');
+                        cheatingDaddy.handleShortcut('next-step');
                     `);
                 } catch (error) {
                     console.error('Error handling next step shortcut:', error);
@@ -222,6 +219,44 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
             console.log(`Registered nextStep: ${keybinds.nextStep}`);
         } catch (error) {
             console.error(`Failed to register nextStep (${keybinds.nextStep}):`, error);
+        }
+    }
+
+    // Register screenshot batch capture shortcut
+    if (keybinds.captureBatch) {
+        try {
+            globalShortcut.register(keybinds.captureBatch, async () => {
+                console.log('Capture batch shortcut triggered');
+                try {
+                    mainWindow.webContents.executeJavaScript(`
+                        cheatingDaddy.handleShortcut('batch-capture');
+                    `);
+                } catch (error) {
+                    console.error('Error handling capture batch shortcut:', error);
+                }
+            });
+            console.log(`Registered captureBatch: ${keybinds.captureBatch}`);
+        } catch (error) {
+            console.error(`Failed to register captureBatch (${keybinds.captureBatch}):`, error);
+        }
+    }
+
+    // Register screenshot batch send shortcut
+    if (keybinds.sendBatch) {
+        try {
+            globalShortcut.register(keybinds.sendBatch, async () => {
+                console.log('Send batch shortcut triggered');
+                try {
+                    mainWindow.webContents.executeJavaScript(`
+                        cheatingDaddy.handleShortcut('batch-send');
+                    `);
+                } catch (error) {
+                    console.error('Error handling send batch shortcut:', error);
+                }
+            });
+            console.log(`Registered sendBatch: ${keybinds.sendBatch}`);
+        } catch (error) {
+            console.error(`Failed to register sendBatch (${keybinds.sendBatch}):`, error);
         }
     }
 

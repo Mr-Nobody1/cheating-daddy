@@ -246,6 +246,8 @@ export class HelpView extends LitElement {
             toggleVisibility: isMac ? 'Cmd+\\' : 'Ctrl+\\',
             toggleClickThrough: isMac ? 'Cmd+M' : 'Ctrl+M',
             nextStep: isMac ? 'Cmd+Enter' : 'Ctrl+Enter',
+            captureBatch: isMac ? 'Cmd+Shift+S' : 'Ctrl+Shift+S',
+            sendBatch: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
             previousResponse: isMac ? 'Cmd+[' : 'Ctrl+[',
             nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
             scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
@@ -341,6 +343,14 @@ export class HelpView extends LitElement {
                             <div class="shortcut-item">
                                 <span class="shortcut-description">Take screenshot and ask for next step</span>
                                 <div class="shortcut-keys">${this.formatKeybind(this.keybinds.nextStep)}</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-description">Capture screenshot into S1/S2/S3 queue</span>
+                                <div class="shortcut-keys">${this.formatKeybind(this.keybinds.captureBatch)}</div>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-description">Send queued screenshots as one prompt</span>
+                                <div class="shortcut-keys">${this.formatKeybind(this.keybinds.sendBatch)}</div>
                             </div>
                         </div>
 

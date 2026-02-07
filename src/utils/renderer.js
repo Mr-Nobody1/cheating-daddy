@@ -16,6 +16,10 @@ let hiddenVideo = null;
 let offscreenCanvas = null;
 let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
+const MAX_MANUAL_BATCH_CAPTURES = 8;
+let manualScreenshotBatch = [];
+let isSendingManualBatch = false;
+let batchMessageTimeout = null;
 
 const isLinux = process.platform === 'linux';
 const isMacOS = process.platform === 'darwin';
@@ -134,6 +138,138 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
+function getQualityValue(imageQuality) {
+    switch (imageQuality) {
+        case 'high':
+            return 0.9;
+        case 'medium':
+            return 0.7;
+        case 'low':
+            return 0.5;
+        default:
+            return 0.7;
+    }
+}
+
+function getAppElement() {
+    return document.querySelector('cheating-daddy-app');
+}
+
+function setAnalyzingScreen(isAnalyzing) {
+    const appElement = getAppElement();
+    if (!appElement) return;
+    appElement.isAnalyzingScreen = isAnalyzing;
+    appElement.requestUpdate();
+}
+
+function getBatchLabels() {
+    return manualScreenshotBatch.map((_, index) => `S${index + 1}`);
+}
+
+function updateMultiCaptureState(message = '', error = '') {
+    const appElement = getAppElement();
+    if (!appElement) return;
+    appElement.multiCaptureState = {
+        count: manualScreenshotBatch.length,
+        labels: getBatchLabels(),
+        isSending: isSendingManualBatch,
+        message,
+        error,
+    };
+    appElement.requestUpdate();
+}
+
+function clearBatchMessageTimeout() {
+    if (batchMessageTimeout) {
+        clearTimeout(batchMessageTimeout);
+        batchMessageTimeout = null;
+    }
+}
+
+function scheduleBatchMessageReset(delayMs = 2000) {
+    clearBatchMessageTimeout();
+    batchMessageTimeout = setTimeout(() => {
+        updateMultiCaptureState();
+        batchMessageTimeout = null;
+    }, delayMs);
+}
+
+function resetManualBatchState(message = '') {
+    clearBatchMessageTimeout();
+    manualScreenshotBatch = [];
+    isSendingManualBatch = false;
+    updateMultiCaptureState(message);
+}
+
+async function ensureCaptureSurfaceReady() {
+    if (!mediaStream) {
+        throw new Error('No media stream available');
+    }
+
+    if (!hiddenVideo) {
+        hiddenVideo = document.createElement('video');
+        hiddenVideo.srcObject = mediaStream;
+        hiddenVideo.muted = true;
+        hiddenVideo.playsInline = true;
+        await hiddenVideo.play();
+
+        await new Promise(resolve => {
+            if (hiddenVideo.readyState >= 2) return resolve();
+            hiddenVideo.onloadedmetadata = () => resolve();
+        });
+
+        offscreenCanvas = document.createElement('canvas');
+        offscreenCanvas.width = hiddenVideo.videoWidth;
+        offscreenCanvas.height = hiddenVideo.videoHeight;
+        offscreenContext = offscreenCanvas.getContext('2d');
+    }
+
+    if (hiddenVideo.readyState < 2) {
+        throw new Error('Video not ready yet');
+    }
+}
+
+async function captureFrameBase64(imageQuality = 'medium') {
+    await ensureCaptureSurfaceReady();
+
+    offscreenContext.drawImage(hiddenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+
+    const qualityValue = getQualityValue(imageQuality);
+    const blob = await new Promise((resolve, reject) => {
+        offscreenCanvas.toBlob(
+            newBlob => {
+                if (!newBlob) {
+                    reject(new Error('Failed to create blob from canvas'));
+                    return;
+                }
+                resolve(newBlob);
+            },
+            'image/jpeg',
+            qualityValue
+        );
+    });
+
+    const base64data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            if (typeof reader.result !== 'string') {
+                reject(new Error('Invalid screenshot buffer'));
+                return;
+            }
+            const encoded = reader.result.split(',')[1];
+            if (!encoded || encoded.length < 100) {
+                reject(new Error('Invalid base64 data generated'));
+                return;
+            }
+            resolve(encoded);
+        };
+        reader.onerror = () => reject(new Error('Failed to read screenshot data'));
+        reader.readAsDataURL(blob);
+    });
+
+    return base64data;
+}
+
 async function initializeGemini(profile = 'interview', language = 'en-US') {
     const apiKey = await storage.getApiKey();
     if (apiKey) {
@@ -156,6 +292,7 @@ ipcRenderer.on('update-status', (event, status) => {
 async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium') {
     // Store the image quality for manual screenshots
     currentImageQuality = imageQuality;
+    resetManualBatchState();
 
     // Refresh preferences cache
     await loadPreferencesCache();
@@ -419,93 +556,20 @@ function setupWindowsLoopbackProcessing() {
 async function captureScreenshot(imageQuality = 'medium', isManual = false) {
     console.log(`Capturing ${isManual ? 'manual' : 'automated'} screenshot...`);
     if (!mediaStream) return;
-
-    // Lazy init of video element
-    if (!hiddenVideo) {
-        hiddenVideo = document.createElement('video');
-        hiddenVideo.srcObject = mediaStream;
-        hiddenVideo.muted = true;
-        hiddenVideo.playsInline = true;
-        await hiddenVideo.play();
-
-        await new Promise(resolve => {
-            if (hiddenVideo.readyState >= 2) return resolve();
-            hiddenVideo.onloadedmetadata = () => resolve();
+    try {
+        const base64data = await captureFrameBase64(imageQuality);
+        const result = await ipcRenderer.invoke('send-image-content', {
+            data: base64data,
         });
 
-        // Lazy init of canvas based on video dimensions
-        offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.width = hiddenVideo.videoWidth;
-        offscreenCanvas.height = hiddenVideo.videoHeight;
-        offscreenContext = offscreenCanvas.getContext('2d');
+        if (result.success) {
+            console.log(`Image sent successfully (${offscreenCanvas.width}x${offscreenCanvas.height})`);
+        } else {
+            console.error('Failed to send image:', result.error);
+        }
+    } catch (error) {
+        console.error('Error while capturing screenshot:', error);
     }
-
-    // Check if video is ready
-    if (hiddenVideo.readyState < 2) {
-        console.warn('Video not ready yet, skipping screenshot');
-        return;
-    }
-
-    offscreenContext.drawImage(hiddenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
-
-    // Check if image was drawn properly by sampling a pixel
-    const imageData = offscreenContext.getImageData(0, 0, 1, 1);
-    const isBlank = imageData.data.every((value, index) => {
-        // Check if all pixels are black (0,0,0) or transparent
-        return index === 3 ? true : value === 0;
-    });
-
-    if (isBlank) {
-        console.warn('Screenshot appears to be blank/black');
-    }
-
-    let qualityValue;
-    switch (imageQuality) {
-        case 'high':
-            qualityValue = 0.9;
-            break;
-        case 'medium':
-            qualityValue = 0.7;
-            break;
-        case 'low':
-            qualityValue = 0.5;
-            break;
-        default:
-            qualityValue = 0.7; // Default to medium
-    }
-
-    offscreenCanvas.toBlob(
-        async blob => {
-            if (!blob) {
-                console.error('Failed to create blob from canvas');
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64data = reader.result.split(',')[1];
-
-                // Validate base64 data
-                if (!base64data || base64data.length < 100) {
-                    console.error('Invalid base64 data generated');
-                    return;
-                }
-
-                const result = await ipcRenderer.invoke('send-image-content', {
-                    data: base64data,
-                });
-
-                if (result.success) {
-                    console.log(`Image sent successfully (${offscreenCanvas.width}x${offscreenCanvas.height})`);
-                } else {
-                    console.error('Failed to send image:', result.error);
-                }
-            };
-            reader.readAsDataURL(blob);
-        },
-        'image/jpeg',
-        qualityValue
-    );
 }
 
 const MANUAL_SCREENSHOT_PROMPT = `Help me on this page, give me the answer no bs, complete answer.
@@ -513,117 +577,128 @@ So if its a code question, give me the approach in few bullet points, then the e
 If its a question about the website, give me the answer no bs, complete answer.
 If its a mcq question, give me the answer no bs, complete answer.`;
 
+const MULTI_SCREENSHOT_PROMPT = `${MANUAL_SCREENSHOT_PROMPT}
+
+You will receive a sequence of screenshots labeled S1, S2, S3...
+Use the full sequence as one problem, reason across all screenshots, and give one final complete answer.
+When useful, reference the specific screenshot label (S1/S2/...) while answering.`;
+
 async function captureManualScreenshot(imageQuality = null) {
     console.log('Manual screenshot triggered');
     const quality = imageQuality || currentImageQuality;
 
     if (!mediaStream) {
         console.error('No media stream available');
+        updateMultiCaptureState('Start a session before capturing.', 'No media stream available');
         return;
     }
 
-    // Notify UI that analysis is starting
-    if (cheatingDaddy.element()) {
-        cheatingDaddy.element().isAnalyzingScreen = true;
-        cheatingDaddy.element().requestUpdate();
-    }
+    setAnalyzingScreen(true);
 
-    // Lazy init of video element
-    if (!hiddenVideo) {
-        hiddenVideo = document.createElement('video');
-        hiddenVideo.srcObject = mediaStream;
-        hiddenVideo.muted = true;
-        hiddenVideo.playsInline = true;
-        await hiddenVideo.play();
-
-        await new Promise(resolve => {
-            if (hiddenVideo.readyState >= 2) return resolve();
-            hiddenVideo.onloadedmetadata = () => resolve();
+    try {
+        const base64data = await captureFrameBase64(quality);
+        const result = await ipcRenderer.invoke('send-image-content', {
+            data: base64data,
+            prompt: MANUAL_SCREENSHOT_PROMPT,
         });
 
-        // Lazy init of canvas based on video dimensions
-        offscreenCanvas = document.createElement('canvas');
-        offscreenCanvas.width = hiddenVideo.videoWidth;
-        offscreenCanvas.height = hiddenVideo.videoHeight;
-        offscreenContext = offscreenCanvas.getContext('2d');
-    }
-
-    // Check if video is ready
-    if (hiddenVideo.readyState < 2) {
-        console.warn('Video not ready yet, skipping screenshot');
+        if (result.success) {
+            console.log(`Image response completed from ${result.model}`);
+        } else {
+            throw new Error(result.error || 'Failed to get image response');
+        }
+    } catch (error) {
+        console.error('Error during manual screenshot:', error);
+        cheatingDaddy.addNewResponse(`Error: ${error.message}`);
+        setAnalyzingScreen(false);
         return;
     }
 
-    offscreenContext.drawImage(hiddenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+    setAnalyzingScreen(false);
+}
 
-    let qualityValue;
-    switch (quality) {
-        case 'high':
-            qualityValue = 0.9;
-            break;
-        case 'medium':
-            qualityValue = 0.7;
-            break;
-        case 'low':
-            qualityValue = 0.5;
-            break;
-        default:
-            qualityValue = 0.7;
+async function captureBatchScreenshot(imageQuality = null) {
+    const quality = imageQuality || currentImageQuality;
+    if (!mediaStream) {
+        updateMultiCaptureState('Start a session before capturing.', 'No media stream available');
+        return;
     }
 
-    offscreenCanvas.toBlob(
-        async blob => {
-            if (!blob) {
-                console.error('Failed to create blob from canvas');
-                return;
-            }
+    if (isSendingManualBatch) {
+        updateMultiCaptureState('Batch is sending. Wait for completion.');
+        return;
+    }
 
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64data = reader.result.split(',')[1];
+    if (manualScreenshotBatch.length >= MAX_MANUAL_BATCH_CAPTURES) {
+        updateMultiCaptureState(`Batch is full (${MAX_MANUAL_BATCH_CAPTURES} captures). Send it first.`);
+        return;
+    }
 
-                if (!base64data || base64data.length < 100) {
-                    console.error('Invalid base64 data generated');
-                    return;
-                }
+    try {
+        clearBatchMessageTimeout();
+        const base64data = await captureFrameBase64(quality);
+        manualScreenshotBatch.push(base64data);
+        const labels = getBatchLabels();
+        const latestLabel = labels[labels.length - 1];
+        updateMultiCaptureState(`Captured ${latestLabel}. Queued: ${labels.join(', ')}`);
+        cheatingDaddy.setStatus(`Captured ${latestLabel}`);
+    } catch (error) {
+        console.error('Error capturing batch screenshot:', error);
+        updateMultiCaptureState('Failed to capture screenshot.', error.message);
+    }
+}
 
-                try {
-                    // Send image with prompt to HTTP API (response streams via IPC events)
-                    const result = await ipcRenderer.invoke('send-image-content', {
-                        data: base64data,
-                        prompt: MANUAL_SCREENSHOT_PROMPT,
-                    });
+async function sendBatchScreenshots() {
+    if (!mediaStream) {
+        updateMultiCaptureState('Start a session before sending.', 'No media stream available');
+        return;
+    }
 
-                    if (result.success) {
-                        console.log(`Image response completed from ${result.model}`);
-                        // Response already displayed via streaming events (new-response/update-response)
-                    } else {
-                        console.error('Failed to get image response:', result.error);
-                        cheatingDaddy.addNewResponse(`Error: ${result.error}`);
-                        // Clear pending state on error
-                        if (cheatingDaddy.element()) {
-                            cheatingDaddy.element().isAnalyzingScreen = false;
-                            cheatingDaddy.element().requestUpdate();
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error during manual screenshot:', error);
-                    // Clear pending state on error
-                    if (cheatingDaddy.element()) {
-                        cheatingDaddy.element().isAnalyzingScreen = false;
-                        cheatingDaddy.element().requestUpdate();
-                    }
-                }
-            };
-            reader.readAsDataURL(blob);
-        },
-        'image/jpeg',
-        qualityValue
-    );
+    if (isSendingManualBatch) {
+        return;
+    }
+
+    if (manualScreenshotBatch.length === 0) {
+        updateMultiCaptureState('No captures queued. Use the capture shortcut first.');
+        return;
+    }
+
+    const queuedLabels = getBatchLabels();
+    const queuedImages = [...manualScreenshotBatch];
+    isSendingManualBatch = true;
+    setAnalyzingScreen(true);
+    clearBatchMessageTimeout();
+    updateMultiCaptureState(`Sending ${queuedLabels.join(', ')} as one prompt...`);
+
+    try {
+        const result = await ipcRenderer.invoke('send-multi-image-content', {
+            images: queuedImages,
+            prompt: MULTI_SCREENSHOT_PROMPT,
+        });
+
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to send screenshot batch');
+        }
+
+        console.log(`Multi-screenshot response completed from ${result.model}`);
+        manualScreenshotBatch = [];
+        isSendingManualBatch = false;
+        updateMultiCaptureState(`Sent ${queuedLabels.join(', ')} as one prompt.`);
+        scheduleBatchMessageReset();
+        setAnalyzingScreen(false);
+    } catch (error) {
+        console.error('Error sending screenshot batch:', error);
+        isSendingManualBatch = false;
+        setAnalyzingScreen(false);
+        cheatingDaddy.addNewResponse(`Error: ${error.message}`);
+        updateMultiCaptureState(`Failed to send ${queuedLabels.join(', ')}`, error.message);
+    }
 }
 
 // Expose functions to global scope for external access
 window.captureManualScreenshot = captureManualScreenshot;
+window.captureBatchScreenshot = captureBatchScreenshot;
+window.sendBatchScreenshots = sendBatchScreenshots;
 
 function stopCapture() {
     if (screenshotInterval) {
@@ -672,6 +747,7 @@ function stopCapture() {
     }
     offscreenCanvas = null;
     offscreenContext = null;
+    resetManualBatchState();
 }
 
 // Send text message to Gemini
@@ -741,12 +817,33 @@ ipcRenderer.on('clear-sensitive-data', async () => {
 // Handle shortcuts based on current view
 function handleShortcut(shortcutKey) {
     const currentView = cheatingDaddy.getCurrentView();
+    const normalizedShortcut = (shortcutKey || '').toLowerCase();
 
-    if (shortcutKey === 'ctrl+enter' || shortcutKey === 'cmd+enter') {
+    if (normalizedShortcut === 'next-step' || normalizedShortcut === 'ctrl+enter' || normalizedShortcut === 'cmd+enter') {
         if (currentView === 'main') {
             cheatingDaddy.element().handleStart();
         } else {
             captureManualScreenshot();
+        }
+        return;
+    }
+
+    if (normalizedShortcut === 'batch-capture' || normalizedShortcut === 'ctrl+shift+s' || normalizedShortcut === 'cmd+shift+s') {
+        if (currentView === 'assistant') {
+            captureBatchScreenshot();
+        }
+        return;
+    }
+
+    if (
+        normalizedShortcut === 'batch-send'
+        || normalizedShortcut === 'ctrl+shift+d'
+        || normalizedShortcut === 'cmd+shift+d'
+        || normalizedShortcut === 'ctrl+shift+enter'
+        || normalizedShortcut === 'cmd+shift+enter'
+    ) {
+        if (currentView === 'assistant') {
+            sendBatchScreenshots();
         }
     }
 }
@@ -966,6 +1063,8 @@ const cheatingDaddy = {
     stopCapture,
     sendTextMessage,
     handleShortcut,
+    captureBatchScreenshot,
+    sendBatchScreenshots,
 
     // Storage API
     storage,

@@ -21,6 +21,7 @@ A real-time AI assistant that provides contextual help during video calls, inter
 - **Live AI Assistance**: Real-time help powered by Google Gemini 2.5 (Flash or Pro) with Gemini 3 Pro Preview for vision
 - **Model Selection**: Choose between Gemini 2.5 Flash (free, 20/day) or Pro (paid, unlimited)
 - **Screen & Audio Capture**: Analyzes what you see and hear for contextual responses
+- **Multi-screenshot Batching**: Queue `S1`, `S2`, `S3`... and send them together as one prompt/request
 - **Multiple Profiles**: Interview, Sales Call, Business Meeting, Presentation, Negotiation, Exam
 - **Response Quality Settings**: Configure verbosity (Concise/Balanced/Detailed) and code detail level
 - **Render Mode**: Choose between streaming or batch response display
@@ -43,7 +44,9 @@ A real-time AI assistant that provides contextual help during video calls, inter
 4. Configure response quality settings (verbosity, code detail level, render mode)
 5. Click "Start Session" to begin
 6. Position the window using keyboard shortcuts
-7. The AI will provide real-time assistance based on your screen and what interview asks
+7. Press `Ctrl/Cmd + Shift + S` to queue screenshots (`S1`, `S2`, ...)
+8. Press `Ctrl/Cmd + Shift + D` to send the queued screenshots as one single prompt/request
+9. The AI will provide real-time assistance based on your screen and what interview asks
 
 ## Model Settings
 
@@ -79,8 +82,18 @@ Access via **Settings → Response Quality**:
 - **Close/Back**: `Ctrl/Cmd + \` - Close window or go back
 - **Send Message**: `Enter` - Send text to AI
 - **Next Step**: `Ctrl/Cmd + Enter` - Take screenshot and ask for next step
+- **Queue Screenshot (Batch)**: `Ctrl/Cmd + Shift + S` - Capture screenshot into queue (`S1`, `S2`, ...)
+- **Send Screenshot Batch**: `Ctrl/Cmd + Shift + D` - Send queued screenshots as one single prompt/request
 - **Navigate Responses**: `Ctrl/Cmd + [` / `]` - Previous/Next response
 - **Scroll Response**: `Ctrl/Cmd + Shift + Up/Down` - Scroll content
+
+## Multi-Screenshot Flow
+
+1. Start a live session
+2. Press `Ctrl/Cmd + Shift + S` for each screenshot you want to queue
+3. Watch the assistant status for `S1`, `S2`, `S3` capture progress
+4. Press `Ctrl/Cmd + Shift + D` to send the full queue
+5. The app submits the batch as a single model request and returns one combined answer
 
 ## Audio Capture
 

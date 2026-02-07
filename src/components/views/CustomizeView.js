@@ -357,6 +357,12 @@ export class CustomizeView extends LitElement {
             border-top: 1px solid var(--border-color);
         }
 
+        .keybind-note {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
         .checkbox-group {
             display: flex;
             align-items: center;
@@ -558,6 +564,7 @@ export class CustomizeView extends LitElement {
         includeExamples: { type: Boolean },
         renderMode: { type: String },
         selectedModel: { type: String },
+        keybindError: { type: String },
     };
 
     constructor() {
@@ -604,6 +611,7 @@ export class CustomizeView extends LitElement {
         this.includeExamples = true;
         this.renderMode = 'streaming';
         this.selectedModel = 'flash';
+        this.keybindError = '';
 
         this._loadFromStorage();
     }
@@ -718,7 +726,7 @@ export class CustomizeView extends LitElement {
             this.selectedModel = prefs.selectedModel ?? 'flash';
 
             if (keybinds) {
-                this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
+                this.keybinds = this.ensureUniqueKeybinds({ ...this.getDefaultKeybinds(), ...keybinds });
             }
 
             this.updateBackgroundTransparency();
@@ -870,11 +878,42 @@ export class CustomizeView extends LitElement {
             toggleVisibility: isMac ? 'Cmd+\\' : 'Ctrl+\\',
             toggleClickThrough: isMac ? 'Cmd+M' : 'Ctrl+M',
             nextStep: isMac ? 'Cmd+Enter' : 'Ctrl+Enter',
+            captureBatch: isMac ? 'Cmd+Shift+S' : 'Ctrl+Shift+S',
+            sendBatch: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
             previousResponse: isMac ? 'Cmd+[' : 'Ctrl+[',
             nextResponse: isMac ? 'Cmd+]' : 'Ctrl+]',
             scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
             scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
         };
+    }
+
+    ensureUniqueKeybinds(candidateKeybinds) {
+        const defaults = this.getDefaultKeybinds();
+        const normalizedSeen = new Set();
+        const resolved = {};
+
+        this.getKeybindActions().forEach(action => {
+            const configured = candidateKeybinds[action.key] || defaults[action.key];
+            const normalized = configured.toLowerCase();
+
+            if (!normalizedSeen.has(normalized)) {
+                resolved[action.key] = configured;
+                normalizedSeen.add(normalized);
+                return;
+            }
+
+            const fallback = defaults[action.key];
+            const fallbackNormalized = fallback.toLowerCase();
+            if (!normalizedSeen.has(fallbackNormalized)) {
+                resolved[action.key] = fallback;
+                normalizedSeen.add(fallbackNormalized);
+                return;
+            }
+
+            resolved[action.key] = configured;
+        });
+
+        return resolved;
     }
 
     async saveKeybinds() {
@@ -887,13 +926,27 @@ export class CustomizeView extends LitElement {
     }
 
     handleKeybindChange(action, value) {
+        const normalizedValue = value.trim().toLowerCase();
+        const conflictEntry = Object.entries(this.keybinds).find(([key, keybind]) => key !== action && keybind && keybind.toLowerCase() === normalizedValue);
+
+        if (conflictEntry) {
+            const conflictingAction = this.getKeybindActions().find(item => item.key === conflictEntry[0]);
+            const conflictingName = conflictingAction?.name || conflictEntry[0];
+            this.keybindError = `"${value}" is already assigned to "${conflictingName}".`;
+            this.requestUpdate();
+            return false;
+        }
+
+        this.keybindError = '';
         this.keybinds = { ...this.keybinds, [action]: value };
         this.saveKeybinds();
         this.requestUpdate();
+        return true;
     }
 
     async resetKeybinds() {
         this.keybinds = this.getDefaultKeybinds();
+        this.keybindError = '';
         await cheatingDaddy.storage.setKeybinds(null);
         this.requestUpdate();
         if (window.require) {
@@ -940,6 +993,16 @@ export class CustomizeView extends LitElement {
                 description: 'Take screenshot and ask AI for the next step suggestion',
             },
             {
+                key: 'captureBatch',
+                name: 'Capture Screenshot (Batch)',
+                description: 'Capture screenshot into S1/S2/S3 queue without sending',
+            },
+            {
+                key: 'sendBatch',
+                name: 'Send Screenshot Batch',
+                description: 'Send all queued screenshots together as one prompt',
+            },
+            {
                 key: 'previousResponse',
                 name: 'Previous Response',
                 description: 'Navigate to the previous AI response',
@@ -971,7 +1034,6 @@ export class CustomizeView extends LitElement {
         e.preventDefault();
 
         const modifiers = [];
-        const keys = [];
 
         // Check modifiers
         if (e.ctrlKey) modifiers.push('Ctrl');
@@ -1030,11 +1092,15 @@ export class CustomizeView extends LitElement {
         const action = e.target.dataset.action;
 
         // Update the keybind
-        this.handleKeybindChange(action, keybind);
+        const updated = this.handleKeybindChange(action, keybind);
 
-        // Update the input value
-        e.target.value = keybind;
-        e.target.blur();
+        if (updated) {
+            // Update the input value
+            e.target.value = keybind;
+            e.target.blur();
+        } else {
+            e.target.select();
+        }
     }
 
     async handleGoogleSearchChange(e) {
@@ -1555,6 +1621,10 @@ export class CustomizeView extends LitElement {
                         </tr>
                     </tbody>
                 </table>
+                ${this.keybindError ? html`
+                    <div class="status-message status-error">${this.keybindError}</div>
+                ` : ''}
+                <div class="keybind-note">Each action must use a unique shortcut.</div>
             </div>
         `;
     }

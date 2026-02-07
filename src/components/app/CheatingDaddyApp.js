@@ -110,6 +110,7 @@ export class CheatingDaddyApp extends LitElement {
         _isClickThrough: { state: true },
         _awaitingNewResponse: { state: true },
         isAnalyzingScreen: { type: Boolean },
+        multiCaptureState: { type: Object },
         shouldAnimateResponse: { type: Boolean },
         _storageLoaded: { state: true },
     };
@@ -133,6 +134,13 @@ export class CheatingDaddyApp extends LitElement {
         this._isClickThrough = false;
         this._awaitingNewResponse = false;
         this.isAnalyzingScreen = false;
+        this.multiCaptureState = {
+            count: 0,
+            labels: [],
+            isSending: false,
+            message: '',
+            error: '',
+        };
         this._currentResponseIsComplete = true;
         this.shouldAnimateResponse = false;
         this._storageLoaded = false;
@@ -552,6 +560,7 @@ export class CheatingDaddyApp extends LitElement {
                         .currentResponseIndex=${this.currentResponseIndex}
                         .selectedProfile=${this.selectedProfile}
                         .isAnalyzingScreen=${this.isAnalyzingScreen}
+                        .multiCaptureState=${this.multiCaptureState}
                         .onSendText=${message => this.handleSendText(message)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
                         @response-index-changed=${this.handleResponseIndexChanged}

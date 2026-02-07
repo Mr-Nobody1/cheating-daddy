@@ -335,6 +335,12 @@ export class AssistantView extends LitElement {
             animation: pulse 1.5s infinite ease-in-out;
         }
 
+        .pending-dot.static {
+            animation: none;
+            opacity: 0.5;
+            transform: scale(1);
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 0.3; transform: scale(0.8); }
             50% { opacity: 1; transform: scale(1.1); }
@@ -345,6 +351,15 @@ export class AssistantView extends LitElement {
             height: 16px;
             stroke: currentColor;
             opacity: 0.7;
+        }
+
+        .pending-error {
+            color: var(--error-color);
+            font-size: 12px;
+        }
+
+        .pending-success {
+            color: var(--success-color);
         }
     `;
 
@@ -358,6 +373,7 @@ export class AssistantView extends LitElement {
         flashLiteCount: { type: Number },
         isSendingText: { type: Boolean },
         isAnalyzingScreen: { type: Boolean },
+        multiCaptureState: { type: Object },
     };
 
     constructor() {
@@ -370,6 +386,13 @@ export class AssistantView extends LitElement {
         this.flashLiteCount = 0;
         this.isSendingText = false;
         this.isAnalyzingScreen = false;
+        this.multiCaptureState = {
+            count: 0,
+            labels: [],
+            isSending: false,
+            message: '',
+            error: '',
+        };
     }
 
     getProfileNames() {
@@ -639,20 +662,35 @@ export class AssistantView extends LitElement {
 
     render() {
         const responseCounter = this.getResponseCounter();
+        const batchState = this.multiCaptureState || {};
+        const batchLabels = batchState.labels || [];
+        const batchMessage = batchState.message || (batchLabels.length > 0 ? `Queued captures: ${batchLabels.join(', ')}` : '');
+        const batchDisplayMessage = batchMessage || (batchState.error ? 'Screenshot batch error.' : 'Screenshot batch update.');
+        const showBatchState = batchState.isSending || batchState.count > 0 || !!batchMessage || !!batchState.error;
+        const showPendingIndicator = this.isAnalyzingScreen || this.isSendingText || showBatchState;
+        const showAnimatedDot = this.isSendingText || this.isAnalyzingScreen || batchState.isSending || batchState.count > 0;
+        const batchMessageClass = batchMessage.startsWith('Sent ') ? 'pending-success' : '';
 
         return html`
             <div class="response-container" id="responseContainer"></div>
 
-            ${this.isAnalyzingScreen || this.isSendingText ? html`
+            ${showPendingIndicator ? html`
                 <div class="pending-indicator">
-                    <div class="pending-dot"></div>
-                    ${this.isAnalyzingScreen ? html`
+                    <div class="pending-dot ${showAnimatedDot ? '' : 'static'}"></div>
+                    ${this.isSendingText ? html`<span>Assistant is thinking...</span>` : showBatchState ? html`
+                        <svg class="screenshot-icon-inline" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M15 4V2M15 4H18C19.1046 4 20 4.89543 20 6V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V6C4 4.89543 4.89543 4 6 4H9M15 4L13.5 1.5M9 4V2M9 4L10.5 1.5M12 12V12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <span class="${batchMessageClass}">${batchDisplayMessage}</span>
+                        ${batchState.error ? html`<span class="pending-error">${batchState.error}</span>` : ''}
+                    ` : this.isAnalyzingScreen ? html`
                         <svg class="screenshot-icon-inline" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M15 4V2M15 4H18C19.1046 4 20 4.89543 20 6V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V6C4 4.89543 4.89543 4 6 4H9M15 4L13.5 1.5M9 4V2M9 4L10.5 1.5M12 12V12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
                         <span>Analyzing Screen...</span>
-                    ` : html`<span>Assistant is thinking...</span>`}
+                    ` : ''}
                 </div>
             ` : ''}
 
