@@ -252,6 +252,7 @@ export class OnboardingView extends LitElement {
         this.canvas = null;
         this.ctx = null;
         this.animationId = null;
+        this._resizeHandler = null;
 
         // Transition properties
         this.isTransitioning = false;
@@ -315,7 +316,8 @@ export class OnboardingView extends LitElement {
         this.resizeCanvas();
         this.startGradientAnimation();
 
-        window.addEventListener('resize', () => this.resizeCanvas());
+        this._resizeHandler = this.resizeCanvas.bind(this);
+        window.addEventListener('resize', this._resizeHandler);
     }
 
     disconnectedCallback() {
@@ -323,7 +325,10 @@ export class OnboardingView extends LitElement {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
         }
-        window.removeEventListener('resize', () => this.resizeCanvas());
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+            this._resizeHandler = null;
+        }
     }
 
     resizeCanvas() {

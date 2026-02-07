@@ -259,14 +259,6 @@ function setupGeneralIpcHandlers() {
         }
     });
 
-    ipcMain.on('update-keybinds', (event, newKeybinds) => {
-        if (mainWindow) {
-            // Also save to storage
-            storage.setKeybinds(newKeybinds);
-            updateGlobalShortcuts(newKeybinds, mainWindow, sendToRenderer, geminiSessionRef);
-        }
-    });
-
     // Debug logging from renderer
     ipcMain.on('log-message', (event, msg) => {
         console.log(msg);

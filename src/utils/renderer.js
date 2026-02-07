@@ -5,6 +5,7 @@ let mediaStream = null;
 let screenshotInterval = null;
 let audioContext = null;
 let audioProcessor = null;
+let micAudioContext = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
 const SAMPLE_RATE = 24000;
@@ -324,7 +325,7 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
 
 function setupLinuxMicProcessing(micStream) {
     // Setup microphone audio processing for Linux
-    const micAudioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+    micAudioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
     const micSource = micAudioContext.createMediaStreamSource(micStream);
     const micProcessor = micAudioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
 
@@ -639,6 +640,11 @@ function stopCapture() {
     if (micAudioProcessor) {
         micAudioProcessor.disconnect();
         micAudioProcessor = null;
+    }
+
+    if (micAudioContext) {
+        micAudioContext.close();
+        micAudioContext = null;
     }
 
     if (audioContext) {

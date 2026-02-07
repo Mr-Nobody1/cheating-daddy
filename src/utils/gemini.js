@@ -143,10 +143,10 @@ async function getEnabledTools() {
     const tools = [];
 
     // Check if Google Search is enabled (default: true)
-    const googleSearchEnabled = await getStoredSetting('googleSearchEnabled', 'true');
+    const googleSearchEnabled = getStoredSetting('googleSearchEnabled', true);
     console.log('Google Search enabled:', googleSearchEnabled);
 
-    if (googleSearchEnabled === 'true') {
+    if (googleSearchEnabled) {
         tools.push({ googleSearch: {} });
         console.log('Added Google Search tool');
     } else {
@@ -156,12 +156,39 @@ async function getEnabledTools() {
     return tools;
 }
 
+function normalizeBoolean(value, defaultValue = false) {
+    if (value === undefined || value === null) {
+        return defaultValue;
+    }
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'string') {
+        return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
+}
+
+function coerceSettingValue(value, defaultValue) {
+    if (defaultValue === undefined) {
+        return value;
+    }
+    if (typeof defaultValue === 'boolean') {
+        return normalizeBoolean(value, defaultValue);
+    }
+    if (typeof defaultValue === 'number') {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : defaultValue;
+    }
+    return value;
+}
+
 function getStoredSetting(key, defaultValue) {
     try {
         const preferences = getPreferences();
         const value = preferences[key];
-        if (value !== undefined) {
-            return value;
+        if (value !== undefined && value !== null) {
+            return coerceSettingValue(value, defaultValue);
         }
     } catch (error) {
         console.error('Error getting stored setting for', key, ':', error.message);
@@ -236,12 +263,6 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     try {
         const session = await client.live.connect({
             model: getSelectedModelId(),
-            config: {
-                systemInstruction: {
-                    parts: [{ text: systemPrompt }],
-                },
-                tools: enabledTools,
-            },
             callbacks: {
                 onopen: function () {
                     sendToRenderer('update-status', 'Live session connected');
@@ -568,10 +589,10 @@ async function sendTextToGeminiHttp(text) {
 
         // Get current preferences for system prompt
         const preferences = getPreferences();
-        const googleSearchEnabled = preferences.googleSearchEnabled ?? true;
+        const googleSearchEnabled = normalizeBoolean(preferences.googleSearchEnabled, true);
         const verbosity = preferences.responseVerbosity ?? 'balanced';
         const codeDetailLevel = preferences.codeDetailLevel ?? 'complete';
-        const includeExamples = preferences.includeExamples ?? true;
+        const includeExamples = normalizeBoolean(preferences.includeExamples, true);
         const profile = preferences.selectedProfile ?? 'interview';
         const customPrompt = preferences.customPrompt ?? '';
 
@@ -884,8 +905,8 @@ async function refreshSystemPrompt(geminiSessionRef) {
     currentSettings = {
         verbosity: preferences.responseVerbosity || 'balanced',
         codeDetailLevel: preferences.codeDetailLevel || 'complete',
-        includeExamples: preferences.includeExamples !== false,
-        googleSearchEnabled: preferences.googleSearchEnabled !== false
+        includeExamples: normalizeBoolean(preferences.includeExamples, true),
+        googleSearchEnabled: normalizeBoolean(preferences.googleSearchEnabled, true)
     };
 
     const profile = preferences.selectedProfile || 'interview';

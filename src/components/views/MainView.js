@@ -140,6 +140,7 @@ export class MainView extends LitElement {
         this.onLayoutModeChange = () => {};
         this.showApiKeyError = false;
         this.boundKeydownHandler = this.handleKeydown.bind(this);
+        this._sessionInitializingHandler = null;
         this.apiKey = '';
         this._loadApiKey();
     }
@@ -151,9 +152,14 @@ export class MainView extends LitElement {
 
     connectedCallback() {
         super.connectedCallback();
-        window.electron?.ipcRenderer?.on('session-initializing', (event, isInitializing) => {
-            this.isInitializing = isInitializing;
-        });
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            this._sessionInitializingHandler = (event, isInitializing) => {
+                this.isInitializing = isInitializing;
+                this.requestUpdate();
+            };
+            ipcRenderer.on('session-initializing', this._sessionInitializingHandler);
+        }
 
         // Add keyboard event listener for Ctrl+Enter (or Cmd+Enter on Mac)
         document.addEventListener('keydown', this.boundKeydownHandler);
@@ -164,7 +170,11 @@ export class MainView extends LitElement {
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        window.electron?.ipcRenderer?.removeAllListeners('session-initializing');
+        if (window.require && this._sessionInitializingHandler) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.removeListener('session-initializing', this._sessionInitializingHandler);
+            this._sessionInitializingHandler = null;
+        }
         // Remove keyboard event listener
         document.removeEventListener('keydown', this.boundKeydownHandler);
     }
