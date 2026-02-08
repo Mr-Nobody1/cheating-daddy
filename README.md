@@ -85,6 +85,9 @@ Access via **Settings → Response Quality**:
 
 1. Start a live session
 2. Press `Ctrl/Cmd + Shift + S` for each screenshot you want to queue
+
+> **Note:** Screenshots and image analysis use Google Gemini 3 Pro (vision model). Ensure your API key has access to Gemini 3 Pro for screenshot/vision features to work correctly.
+
 3. Watch the assistant status for `S1`, `S2`, `S3` capture progress
 4. Press `Ctrl/Cmd + Shift + D` to send the full queue
 5. The app submits the batch as a single model request and returns one combined answer
