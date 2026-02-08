@@ -1,8 +1,8 @@
 {
-    "name": "cheating-daddy",
-    "productName": "cheating-daddy",
+    "name": "betterly",
+    "productName": "Betterly",
     "version": "0.5.1",
-    "description": "cheating daddy",
+    "description": "Betterly",
     "main": "src/index.js",
     "scripts": {
         "start": "electron-forge start",
@@ -13,11 +13,11 @@
         "test": "node --test tests/"
     },
     "keywords": [
-        "cheating daddy",
-        "cheating daddy ai",
-        "cheating daddy ai assistant",
-        "cheating daddy ai assistant for interviews",
-        "cheating daddy ai assistant for interviews"
+        "betterly",
+        "betterly ai",
+        "betterly ai assistant",
+        "betterly ai assistant for interviews",
+        "betterly ai assistant for interviews"
     ],
     "author": {
         "name": "sohzm",

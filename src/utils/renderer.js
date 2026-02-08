@@ -583,6 +583,18 @@ You will receive a sequence of screenshots labeled S1, S2, S3...
 Use the full sequence as one problem, reason across all screenshots, and give one final complete answer.
 When useful, reference the specific screenshot label (S1/S2/...) while answering.`;
 
+async function buildImagePrompt(basePrompt) {
+    const prefs = await storage.getPreferences();
+    preferencesCache = prefs;
+    const customPrompt = (prefs.customPrompt || '').trim();
+
+    if (!customPrompt) {
+        return basePrompt;
+    }
+
+    return `${basePrompt}\n\nUser-provided context:\n${customPrompt}`;
+}
+
 async function captureManualScreenshot(imageQuality = null) {
     console.log('Manual screenshot triggered');
     const quality = imageQuality || currentImageQuality;
@@ -597,9 +609,10 @@ async function captureManualScreenshot(imageQuality = null) {
 
     try {
         const base64data = await captureFrameBase64(quality);
+        const prompt = await buildImagePrompt(MANUAL_SCREENSHOT_PROMPT);
         const result = await ipcRenderer.invoke('send-image-content', {
             data: base64data,
-            prompt: MANUAL_SCREENSHOT_PROMPT,
+            prompt: prompt,
         });
 
         if (result.success) {
@@ -671,9 +684,10 @@ async function sendBatchScreenshots() {
     updateMultiCaptureState(`Sending ${queuedLabels.join(', ')} as one prompt...`);
 
     try {
+        const prompt = await buildImagePrompt(MULTI_SCREENSHOT_PROMPT);
         const result = await ipcRenderer.invoke('send-multi-image-content', {
             images: queuedImages,
-            prompt: MULTI_SCREENSHOT_PROMPT,
+            prompt: prompt,
         });
 
         if (!result.success) {

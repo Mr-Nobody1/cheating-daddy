@@ -1,6 +1,6 @@
 # Repo Guidelines
 
-This repository is a fork of [`cheating-daddy`](https://github.com/sohzm/cheating-daddy).
+This repository is Betterly, forked from [`cheating-daddy`](https://github.com/sohzm/cheating-daddy).
 It provides an Electron-based real‑time assistant which captures screen and audio
 for contextual AI responses. The code is JavaScript and uses Electron Forge for
 packaging.
@@ -59,7 +59,7 @@ merging upstream changes.
 
 ## Merging upstream PRs
 
-Pull requests from <https://github.com/sohzm/cheating-daddy> are commonly
+Pull requests from <https://github.com/sohzm/betterly> are commonly
 cherry‑picked here. When merging:
 
 1. Inspect the diff and keep commit messages short (`feat:` / `fix:` etc.).
